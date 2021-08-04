@@ -45,10 +45,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
             pub fn build(&mut self) -> Result<#name, Box<dyn Error>> {
                 Ok(#name {
-                    env: self.env.take().unwrap(),
-                    args: self.args.take().unwrap(),
-                    executable: self.executable.take().unwrap(),
-                    current_dir: self.current_dir.take().unwrap(),
+                    env: self.env.take().ok_or("Env is required")?,
+                    args: self.args.take().ok_or("Args is required")?,
+                    executable: self.executable.take().ok_or("Executable is required")?,
+                    current_dir: self.current_dir.take().ok_or("Current dir is required")?,
                 })
             }
         }
