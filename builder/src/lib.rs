@@ -9,10 +9,20 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let builder_struct_name = format!("{}Builder", name);
     let builder_struct_name = syn::Ident::new(&builder_struct_name, name.span());
     let tokens = quote!(
-        struct #builder_struct_name {}
+        struct #builder_struct_name {
+            executable: Option<String>,
+            args: Option<Vec<String>>,
+            env: Option<Vec<String>>,
+            current_dir: Option<String>
+        }
         impl #name {
             fn builder() -> #builder_struct_name {
-                #builder_struct_name {}
+                #builder_struct_name {
+                    env: None,
+                    args: None,
+                    executable: None,
+                    current_dir: None
+                }
             }
         }
     );
