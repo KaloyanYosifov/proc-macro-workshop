@@ -9,6 +9,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let builder_struct_name = format!("{}Builder", name);
     let builder_struct_name = syn::Ident::new(&builder_struct_name, name.span());
     let tokens = quote!(
+        use std::error::Error;
+
         pub struct #builder_struct_name {
             executable: Option<String>,
             args: Option<Vec<String>>,
@@ -39,6 +41,15 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 self.current_dir = Some(dir);
 
                 self
+            }
+
+            pub fn build(&mut self) -> Result<#name, Box<dyn Error>> {
+                Ok(#name {
+                    env: self.env.take().unwrap(),
+                    args: self.args.take().unwrap(),
+                    executable: self.executable.take().unwrap(),
+                    current_dir: self.current_dir.take().unwrap(),
+                })
             }
         }
 
