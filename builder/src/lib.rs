@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, DeriveInput};
+
 use quote::quote;
+use syn::{Data, DeriveInput, Fields, parse_macro_input, Type};
 
 #[proc_macro_derive(Builder)]
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -8,6 +9,40 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let name = &parsed_ast.ident;
     let builder_struct_name = format!("{}Builder", name);
     let builder_struct_name = syn::Ident::new(&builder_struct_name, name.span());
+    let data = parsed_ast.data;
+
+    let fields = if let Data::Struct(data_struct) = data {
+        if let Fields::Named(named_fields) = data_struct.fields {
+            named_fields.named
+        } else {
+            todo!();
+        }
+    } else {
+        todo!();
+    };
+
+    let constructor_arguments = fields.iter().map(|field| {
+        let field_name = field.ident.as_ref().unwrap();
+        let field_type = if let Type::Path(path) = &field.ty {
+            let segments = &path.path.segments;
+            let segment = segments.last().unwrap();
+
+            segment.ident.to_string()
+        } else {
+            todo!();
+        };
+
+        if field_type == "Option" {
+            quote! {
+                #field_name: self.#field_name.take(),
+            }
+        } else {
+            quote! {
+                #field_name: self.#field_name.take().ok_or("#name is required")?
+            }
+        }
+    });
+
     let tokens = quote!(
         use std::error::Error;
 
@@ -45,10 +80,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
             pub fn build(&mut self) -> Result<#name, Box<dyn Error>> {
                 Ok(#name {
-                    env: self.env.take().ok_or("Env is required")?,
-                    args: self.args.take().ok_or("Args is required")?,
-                    executable: self.executable.take().ok_or("Executable is required")?,
-                    current_dir: self.current_dir.take().ok_or("Current dir is required")?,
+                    #(#constructor_arguments),*
                 })
             }
         }
