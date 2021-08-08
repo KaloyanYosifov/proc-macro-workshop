@@ -3,6 +3,37 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, parse_macro_input, Type};
 
+fn get_type_indent_without_option_wrapped(ty: &Type) -> Option<&Type> {
+    if let Type::Path(path) = ty {
+        let segments = &path.path.segments;
+        let segment = segments.last().unwrap();
+        let ident = get_first_level_indent_of_type(ty).unwrap();
+
+        if ident == "Option" {
+            if let syn::PathArguments::AngleBracketed(field) = &segment.arguments {
+                if let syn::GenericArgument::Type(nested_type) = field.args.last().unwrap() {
+                    return get_type_indent_without_option_wrapped(nested_type);
+                }
+            }
+        }
+
+        Some(ty)
+    } else {
+        None
+    }
+}
+
+fn get_first_level_indent_of_type(ty: &Type) -> Option<&syn::Ident> {
+    if let Type::Path(path) = ty {
+        let segments = &path.path.segments;
+        let segment = segments.last().unwrap();
+
+        Some(&segment.ident)
+    } else {
+        None
+    }
+}
+
 #[proc_macro_derive(Builder)]
 pub fn derive(input: TokenStream) -> TokenStream {
     let parsed_ast = parse_macro_input!(input as DeriveInput);
@@ -11,9 +42,9 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let builder_struct_name = syn::Ident::new(&builder_struct_name, name.span());
     let data = parsed_ast.data;
 
-    let fields = if let Data::Struct(data_struct) = data {
-        if let Fields::Named(named_fields) = data_struct.fields {
-            named_fields.named
+    let fields = if let Data::Struct(ref data_struct) = data {
+        if let Fields::Named(ref named_fields) = data_struct.fields {
+            &named_fields.named
         } else {
             todo!();
         }
@@ -21,20 +52,47 @@ pub fn derive(input: TokenStream) -> TokenStream {
         todo!();
     };
 
+    let builder_fields = fields.iter().map(|field| {
+        let field_name = field.ident.as_ref().unwrap();
+        let field_type = &field.ty;
+        let ident = get_first_level_indent_of_type(field_type).unwrap();
+
+        if ident == "Option" {
+            quote! {
+                #field_name: #field_type
+            }
+        } else {
+            quote! {
+                #field_name: std::option::Option<#field_type>
+            }
+        }
+    });
+    let builder_fields_empty = fields.iter().map(|field| {
+        let field_name = field.ident.as_ref().unwrap();
+
+        quote! {
+            #field_name: None
+        }
+    });
+    let builder_fields_methods = fields.iter().map(|field| {
+        let field_name = field.ident.as_ref().unwrap();
+        let field_type = get_type_indent_without_option_wrapped(&field.ty).unwrap();
+
+        quote! {
+            pub fn #field_name(&mut self, #field_name: #field_type) -> &mut Self {
+                self.#field_name = Some(#field_name);
+
+                self
+            }
+        }
+    });
     let constructor_arguments = fields.iter().map(|field| {
         let field_name = field.ident.as_ref().unwrap();
-        let field_type = if let Type::Path(path) = &field.ty {
-            let segments = &path.path.segments;
-            let segment = segments.last().unwrap();
+        let field_ident = get_first_level_indent_of_type(&field.ty).unwrap();
 
-            segment.ident.to_string()
-        } else {
-            todo!();
-        };
-
-        if field_type == "Option" {
+        if field_ident == "Option" {
             quote! {
-                #field_name: self.#field_name.take(),
+                #field_name: self.#field_name.take()
             }
         } else {
             quote! {
@@ -47,40 +105,15 @@ pub fn derive(input: TokenStream) -> TokenStream {
         use std::error::Error;
 
         pub struct #builder_struct_name {
-            executable: Option<String>,
-            args: Option<Vec<String>>,
-            env: Option<Vec<String>>,
-            current_dir: Option<String>
+            #(#builder_fields,)*
         }
 
         impl #builder_struct_name {
-            pub fn executable(&mut self, exe: String) -> &mut Self {
-                self.executable = Some(exe);
-
-                self
-            }
-
-            pub fn args(&mut self, args: Vec<String>) -> &mut Self {
-                self.args = Some(args);
-
-                self
-            }
-
-            pub fn env(&mut self, env: Vec<String>) -> &mut Self {
-                self.env = Some(env);
-
-                self
-            }
-
-            pub fn current_dir(&mut self, dir: String) -> &mut Self {
-                self.current_dir = Some(dir);
-
-                self
-            }
+            #(#builder_fields_methods)*
 
             pub fn build(&mut self) -> Result<#name, Box<dyn Error>> {
                 Ok(#name {
-                    #(#constructor_arguments),*
+                    #(#constructor_arguments,)*
                 })
             }
         }
@@ -88,10 +121,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         impl #name {
            pub fn builder() -> #builder_struct_name {
                 #builder_struct_name {
-                    env: None,
-                    args: None,
-                    executable: None,
-                    current_dir: None
+                    #(#builder_fields_empty,)*
                 }
             }
         }
