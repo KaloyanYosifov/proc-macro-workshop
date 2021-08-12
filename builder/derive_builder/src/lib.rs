@@ -34,12 +34,13 @@ fn get_first_level_indent_of_type(ty: &Type) -> Option<&syn::Ident> {
     }
 }
 
-#[proc_macro_derive(Builder)]
+#[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: TokenStream) -> TokenStream {
     let parsed_ast = parse_macro_input!(input as DeriveInput);
     let name = &parsed_ast.ident;
     let builder_struct_name = format!("{}Builder", name);
     let builder_struct_name = syn::Ident::new(&builder_struct_name, name.span());
+    eprintln!("{:#?}", parsed_ast.attrs);
     let data = parsed_ast.data;
 
     let fields = if let Data::Struct(ref data_struct) = data {
@@ -95,8 +96,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 #field_name: self.#field_name.take()
             }
         } else {
+            let error = format!("{} is required", field_name);
+
             quote! {
-                #field_name: self.#field_name.take().ok_or("#name is required")?
+                #field_name: self.#field_name.take().ok_or(#error)?
             }
         }
     });
@@ -110,6 +113,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
         impl #builder_struct_name {
             #(#builder_fields_methods)*
+
+            pub fn arg(&mut self, test: String) -> &mut Self {
+                self
+            }
 
             pub fn build(&mut self) -> Result<#name, Box<dyn Error>> {
                 Ok(#name {

@@ -1,12 +1,14 @@
 [package]
-name = "derive_builder"
+name = "builder"
 version = "0.0.0"
 edition = "2018"
 autotests = false
 publish = false
 
-[lib]
-proc-macro = true
+[workspace]
+members = [
+    "derive_builder"
+]
 
 [[test]]
 name = "tests"
@@ -16,6 +18,5 @@ path = "tests/progress.rs"
 trybuild = { version = "1.0", features = ["diff"] }
 
 [dependencies]
-syn = { version = "1.0.74", features = ["extra-traits"] }
-quote = "1.0.9"
+derive_builder = { path = "./derive_builder" }
 # TODO
