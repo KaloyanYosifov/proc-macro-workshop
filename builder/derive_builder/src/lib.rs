@@ -135,7 +135,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         let field_name = field.ident.as_ref().unwrap();
 
         quote! {
-            #field_name: None
+            #field_name: std::option::Option::None
         }
     });
     let builder_fields_methods = fields.iter().map(|field| {
@@ -150,7 +150,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
         quote! {
             pub fn #field_name(&mut self, #field_name: #field_type) -> &mut Self {
-                self.#field_name = Some(#field_name);
+                self.#field_name = std::option::Option::Some(#field_name);
 
                 self
             }
@@ -166,7 +166,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
         } else if field_ident == "Vec" {
             quote! {
-                #field_name: self.#field_name.take().or(Some(vec![])).unwrap()
+                #field_name: self.#field_name.take().or(std::option::Option::Some(vec![])).unwrap()
             }
         } else {
             let error = format!("{} is required", field_name);
@@ -188,7 +188,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             #(#builder_fields_methods)*
             #(#extra_builder_methods)*
 
-            pub fn build(&mut self) -> Result<#name, Box<dyn Error>> {
+            pub fn build(&mut self) -> std::result::Result<#name, std::boxed::Box<dyn Error>> {
                 Ok(#name {
                     #(#constructor_arguments,)*
                 })
