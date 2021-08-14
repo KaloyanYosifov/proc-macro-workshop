@@ -2,6 +2,7 @@ use proc_macro::TokenStream;
 
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, parse_macro_input, Type, PathSegment};
+use proc_macro2::TokenTree;
 
 fn get_type_without_ident_wrapped(ty: &Type, skipped_ident: String) -> Option<&Type> {
     if let Type::Path(path) = ty {
@@ -37,6 +38,30 @@ fn get_first_level_indent_of_type(ty: &Type) -> Option<&syn::Ident> {
     }
 }
 
+fn parse_field_attribute_and_get_identifier(field: &syn::Field) -> Option<TokenTree> {
+    if field.attrs.len() <= 0 {
+        return None;
+    }
+
+    let attribute = field.attrs.get(0).unwrap();
+    let segment = get_first_segment_from_path(&attribute.path);
+
+    if segment.ident != "builder" {
+        panic!("Only builder attribute supported!");
+    }
+
+    if let proc_macro2::TokenTree::Group(group) = attribute.tokens.clone().into_iter().next().unwrap() {
+        let mut tokens = group.stream().into_iter();
+
+        assert_eq!(tokens.next().unwrap().to_string(), "each");
+        assert_eq!(tokens.next().unwrap().to_string(), "=");
+
+        Some(tokens.next().unwrap())
+    } else {
+        None
+    }
+}
+
 #[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: TokenStream) -> TokenStream {
     let parsed_ast = parse_macro_input!(input as DeriveInput);
@@ -59,33 +84,33 @@ pub fn derive(input: TokenStream) -> TokenStream {
         .iter()
         .filter(|field| field.attrs.len() > 0)
         .map(|field| {
-            let attribute = field.attrs.get(0).unwrap();
-            let segment = get_first_segment_from_path(&attribute.path);
-
-            if segment.ident != "builder" {
-                panic!("Only builder attribute supported!");
-            }
-
-            if let proc_macro2::TokenTree::Group(group) = attribute.tokens.clone().into_iter().next().unwrap() {
-                let mut tokens = group.stream().into_iter();
-
-                assert_eq!(tokens.next().unwrap().to_string(), "each");
-                assert_eq!(tokens.next().unwrap().to_string(), "=");
-
-                let argument = tokens.next().unwrap();
+            if let Some(argument) = parse_field_attribute_and_get_identifier(&field) {
                 let field_name = field.ident.as_ref().unwrap();
                 let field_type = get_type_without_ident_wrapped(&field.ty, "Option".to_string()).unwrap();
-                let field_type = get_type_without_ident_wrapped(field_type, "Vec".to_string()).unwrap();
 
-                return quote! {
-                    pub fn #field_name(&mut self, value: #field_type) -> &mut Self {
-                        self.#field_name.push(value);
+                match get_first_level_indent_of_type(field_type) {
+                    Some(value) => assert_eq!("Vec", value.to_string()),
+                    _ => panic!("Only vectors are allowed with each macro!"),
+                };
+
+                let field_type = get_type_without_ident_wrapped(field_type, "Vec".to_string()).unwrap();
+                let parsed_argument = syn::Ident::new(
+                    &argument.to_string().replace('"', ""),
+                    proc_macro2::Span::call_site(),
+                );
+
+                quote! {
+                    pub fn #parsed_argument(&mut self, value: #field_type) -> &mut Self {
+                        self.#field_name
+                            .get_or_insert(vec![])
+                            .push(value);
+
                         self
                     }
-                };
+                }
+            } else {
+                quote! {}
             }
-
-            quote! {}
         });
     let builder_fields = fields.iter().map(|field| {
         let field_name = field.ident.as_ref().unwrap();
@@ -113,6 +138,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
         let field_name = field.ident.as_ref().unwrap();
         let field_type = get_type_without_ident_wrapped(&field.ty, "Option".to_string()).unwrap();
 
+        if let Some(argument) = parse_field_attribute_and_get_identifier(&field) {
+            if field_name == &argument.to_string().replace('"', "") {
+                return quote! {};
+            }
+        }
+
         quote! {
             pub fn #field_name(&mut self, #field_name: #field_type) -> &mut Self {
                 self.#field_name = Some(#field_name);
@@ -128,6 +159,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
         if field_ident == "Option" {
             quote! {
                 #field_name: self.#field_name.take()
+            }
+        } else if field_ident == "Vec" {
+            quote! {
+                #field_name: self.#field_name.take().or(Some(vec![])).unwrap()
             }
         } else {
             let error = format!("{} is required", field_name);
