@@ -53,7 +53,10 @@ fn parse_field_attribute_and_get_identifier(field: &syn::Field) -> Option<TokenT
     if let proc_macro2::TokenTree::Group(group) = attribute.tokens.clone().into_iter().next().unwrap() {
         let mut tokens = group.stream().into_iter();
 
-        assert_eq!(tokens.next().unwrap().to_string(), "each");
+        if tokens.next().unwrap().to_string() != "each" {
+            proc_macro_error::abort!(attribute, "expected `builder(each = \"...\")`");
+        }
+
         assert_eq!(tokens.next().unwrap().to_string(), "=");
 
         Some(tokens.next().unwrap())
@@ -62,6 +65,7 @@ fn parse_field_attribute_and_get_identifier(field: &syn::Field) -> Option<TokenT
     }
 }
 
+#[proc_macro_error::proc_macro_error]
 #[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: TokenStream) -> TokenStream {
     let parsed_ast = parse_macro_input!(input as DeriveInput);
