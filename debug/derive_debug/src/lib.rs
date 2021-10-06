@@ -2,28 +2,27 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput, Ident, Data, Fields};
 
-#[proc_macro_derive(CustomDebug)]
+#[proc_macro_derive(CustomDebug, attributes(debug))]
 pub fn derive(input: TokenStream) -> TokenStream {
     let parsed_ast = parse_macro_input!(input as DeriveInput);
     let struct_structure = &parsed_ast.ident;
     let struct_name = struct_structure.to_string();
-    let field_names = if let Data::Struct(ref data_struct) = parsed_ast.data {
+    let fields = if let Data::Struct(ref data_struct) = parsed_ast.data {
         if let Fields::Named(ref fields) = data_struct.fields {
-            fields
-                .named
-                .iter()
-                .map(|field| field.ident.as_ref().unwrap().to_string())
-                .collect::<Vec<String>>()
+            &fields.named
         } else {
             todo!();
         }
     } else {
         todo!();
     };
-    let debug_fields = field_names
+    let field_names = fields
         .iter()
-        .map(|name| {
-            let ident = Ident::new(&name, proc_macro2::Span::call_site());
+        .map(|field| field.ident.as_ref().unwrap().to_string());
+    let debug_fields = fields
+        .iter()
+        .map(|field| {
+            let ident: &Ident = field.ident.as_ref().unwrap();
 
             quote! {
                 &self.#ident
