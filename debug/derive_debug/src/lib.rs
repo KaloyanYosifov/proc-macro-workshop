@@ -1,6 +1,8 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput, Ident, Data, Fields};
+use std::fmt::{Debug, Formatter};
+use syn::token::Token;
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -16,24 +18,32 @@ pub fn derive(input: TokenStream) -> TokenStream {
     } else {
         todo!();
     };
-    let field_names = fields
+    let mut formatter = String::from("{} {{ ");
+    let debug_fields: Vec<_> = fields
         .iter()
-        .map(|field| field.ident.as_ref().unwrap().to_string());
-    let debug_fields = fields
-        .iter()
-        .map(|field| {
+        .enumerate()
+        .map(|(index, field)| {
             let ident: &Ident = field.ident.as_ref().unwrap();
+            let stringified_ident = ident.to_string();
+
+            if index == 0 {
+                formatter.push_str("{}");
+            } else {
+                formatter.push_str(", {}");
+            }
 
             quote! {
-                &self.#ident
+                format!("{}: {}", #stringified_ident, &self.#ident)
             }
-        });
+        })
+        .collect();
+
+    formatter.push_str(" }}");
+
     let returned_token = quote! {
         impl std::fmt::Debug for #struct_structure {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.debug_struct(#struct_name)
-                    #(.field(#field_names, #debug_fields))*
-                    .finish()
+                write!(f, #formatter, #struct_name, #(#debug_fields,)*)
             }
         }
     };
