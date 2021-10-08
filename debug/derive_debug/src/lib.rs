@@ -1,8 +1,6 @@
-use proc_macro::TokenStream;
 use quote::quote;
+use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput, Ident, Data, Fields};
-use std::fmt::{Debug, Formatter};
-use syn::token::Token;
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -33,7 +31,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
 
             quote! {
-                format!("{}: {}", #stringified_ident, &self.#ident)
+                format!("{}: \"{}\"", #stringified_ident, &self.#ident)
             }
         })
         .collect();
