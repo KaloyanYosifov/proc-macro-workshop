@@ -1,6 +1,9 @@
+#![feature(entry_insert)]
+
 use quote::quote;
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput, Ident, Data, Fields};
+use std::collections::HashMap;
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -16,6 +19,31 @@ pub fn derive(input: TokenStream) -> TokenStream {
     } else {
         todo!();
     };
+    let mut hasher = HashMap::new();
+
+    fields.iter().for_each(|field| {
+        field.attrs.iter()
+            .for_each(|e| {
+                if let syn::Meta::NameValue(name_value) = e.parse_meta().unwrap() {
+                    let name = name_value.path.segments[0].ident.to_string();
+
+                    if name != "debug" {
+                        todo!();
+                    }
+
+                    let value: String = if let syn::Lit::Str(lit) = name_value.lit {
+                        lit.value()
+                    } else {
+                        todo!()
+                    };
+
+                    hasher.insert(field.ident.as_ref().unwrap().to_string(), value);
+                } else {
+                    todo!();
+                }
+            });
+    });
+
     let mut formatter = String::from("{} {{ ");
     let debug_fields: Vec<_> = fields
         .iter()
@@ -30,8 +58,15 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 formatter.push_str(", {}");
             }
 
-            quote! {
-                format!("{}: \"{}\"", #stringified_ident, &self.#ident)
+            if hasher.contains_key(&stringified_ident) {
+                let formatting = hasher.get(&stringified_ident).unwrap();
+                quote! {
+                    format!("{}: {}", #stringified_ident, format!(#formatting, self.#ident))
+                }
+            } else {
+                quote! {
+                    format!("{}: \"{}\"", #stringified_ident, &self.#ident)
+                }
             }
         })
         .collect();
