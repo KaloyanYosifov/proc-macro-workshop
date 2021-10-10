@@ -2,23 +2,13 @@
 
 use quote::quote;
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, DeriveInput, Ident, Data, Fields};
+use syn::{parse_macro_input, DeriveInput, Ident, Data, Fields, Field};
 use std::collections::HashMap;
+use syn::punctuated::Punctuated;
 
-#[proc_macro_derive(CustomDebug, attributes(debug))]
-pub fn derive(input: TokenStream) -> TokenStream {
-    let parsed_ast = parse_macro_input!(input as DeriveInput);
-    let struct_structure = &parsed_ast.ident;
-    let struct_name = struct_structure.to_string();
-    let fields = if let Data::Struct(ref data_struct) = parsed_ast.data {
-        if let Fields::Named(ref fields) = data_struct.fields {
-            &fields.named
-        } else {
-            todo!();
-        }
-    } else {
-        todo!();
-    };
+type DebugFields = Punctuated<Field, syn::token::Comma>;
+
+fn get_fields_attribute_values(fields: &DebugFields) -> HashMap<String, String> {
     let mut hasher = HashMap::new();
 
     fields.iter().for_each(|field| {
@@ -44,6 +34,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
             });
     });
 
+    hasher
+}
+
+fn get_fields_to_show_in_debug(fields: &DebugFields, fields_with_attributes: &HashMap<String, String>) -> (String, Vec<proc_macro2::TokenStream>) {
     let mut formatter = String::from("{} {{ ");
     let debug_fields: Vec<_> = fields
         .iter()
@@ -58,8 +52,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 formatter.push_str(", {}");
             }
 
-            if hasher.contains_key(&stringified_ident) {
-                let formatting = hasher.get(&stringified_ident).unwrap();
+            if fields_with_attributes.contains_key(&stringified_ident) {
+                let formatting = fields_with_attributes.get(&stringified_ident).unwrap();
                 quote! {
                     format!("{}: {}", #stringified_ident, format!(#formatting, self.#ident))
                 }
@@ -72,6 +66,26 @@ pub fn derive(input: TokenStream) -> TokenStream {
         .collect();
 
     formatter.push_str(" }}");
+
+    (formatter, debug_fields)
+}
+
+#[proc_macro_derive(CustomDebug, attributes(debug))]
+pub fn derive(input: TokenStream) -> TokenStream {
+    let parsed_ast = parse_macro_input!(input as DeriveInput);
+    let struct_structure = &parsed_ast.ident;
+    let struct_name = struct_structure.to_string();
+    let fields = if let Data::Struct(ref data_struct) = parsed_ast.data {
+        if let Fields::Named(ref fields) = data_struct.fields {
+            &fields.named
+        } else {
+            todo!();
+        }
+    } else {
+        todo!();
+    };
+    let fields_with_attributes = get_fields_attribute_values(fields);
+    let (formatter, debug_fields) = get_fields_to_show_in_debug(fields, &fields_with_attributes);
 
     let returned_token = quote! {
         impl std::fmt::Debug for #struct_structure {
