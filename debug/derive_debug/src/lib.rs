@@ -86,9 +86,32 @@ pub fn derive(input: TokenStream) -> TokenStream {
     };
     let fields_with_attributes = get_fields_attribute_values(fields);
     let (formatter, debug_fields) = get_fields_to_show_in_debug(fields, &fields_with_attributes);
+    let mut generic = quote! {};
+    let mut generic_impl = quote! {};
+
+    if parsed_ast.generics.params.len() > 0 {
+        let generic_names: Vec<&syn::Ident> = parsed_ast.generics.params
+            .iter()
+            .map(|param| {
+                if let syn::GenericParam::Type(generic_param) = param {
+                    &generic_param.ident
+                } else {
+                    todo!();
+                }
+            })
+            .collect();
+
+        generic = quote! {
+            <#(#generic_names),*>
+        };
+
+        generic_impl = quote! {
+            <#(#generic_names: std::fmt::Display),*>
+        };
+    }
 
     let returned_token = quote! {
-        impl std::fmt::Debug for #struct_structure {
+        impl#generic_impl std::fmt::Debug for #struct_structure#generic {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, #formatter, #struct_name, #(#debug_fields,)*)
             }
